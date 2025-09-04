@@ -1,0 +1,11 @@
+.env
+
+/generated/prisma
+
+node_modules/
+node_modules/**
+
+dist/
+build/
+coverage/
+target/

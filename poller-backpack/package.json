@@ -1,0 +1,21 @@
+{
+  "name": "project-202",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "tsc -b && node dist/index.js",
+    "subs": "tsc -b && node dist/getData.js"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/express": "^5.0.3",
+    "@types/ws": "^8.18.1",
+    "express": "^5.1.0",
+    "ioredis": "^5.7.0",
+    "typescript": "^5.9.2",
+    "ws": "^8.18.3"
+  }
+}
