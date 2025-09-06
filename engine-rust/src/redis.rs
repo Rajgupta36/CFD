@@ -1,66 +1,180 @@
-use crate::engine::engine::Engine;
-use crate::serializer::event::EventType;
-use redis::{AsyncCommands, FromRedisValue, streams::StreamReadOptions};
+use crate::engine::error::CreateOrderResp;
+use crate::types::event::EventType;
+use crate::types::order::{Balance, CloseOrderReq, CreateOrderReq};
+use crate::{engine::engine::Engine, types::order::EngineCommand};
+use redis::{AsyncCommands, streams::StreamReadOptions};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serde_redis::from_redis_value;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, mpsc};
+use std::collections::HashMap;
+use tokio::sync::oneshot::channel;
+use tokio::sync::{mpsc, oneshot};
 extern crate redis;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct CryptoInfo {
     symbol: String,
-    price: f64,
+    price: i64,
     decimal: i32,
 }
 
 type CryptoMap = HashMap<String, CryptoInfo>;
 
-pub async fn redis_manager(
-    topic: String,
-    btc_manager: Arc<Mutex<Engine>>,
-    eth_manager: Arc<Mutex<Engine>>,
-    sol_manager: Arc<Mutex<Engine>>,
-) -> () {
+pub async fn redis_manager(topic: String) -> () {
     let client = redis::Client::open("redis://localhost:6379/").unwrap();
     let topic = topic;
 
     let mut offset = String::from("$");
-    let (tx_sol, mut rx_sol) = mpsc::channel::<CryptoInfo>(100);
-    let (tx_eth, mut rx_eth) = mpsc::channel::<CryptoInfo>(100);
-    let (tx_btc, mut rx_btc) = mpsc::channel::<CryptoInfo>(100);
+    let (tx_sol, mut rx_sol) = mpsc::channel::<EngineCommand>(100);
+    let (tx_eth, mut rx_eth) = mpsc::channel::<EngineCommand>(100);
+    let (tx_btc, mut rx_btc) = mpsc::channel::<EngineCommand>(100);
 
     //thread spawn for each market
     tokio::spawn(async move {
-        println!("ETH task started");
+        let mut eth_manager = Engine::new(String::from("ETH"));
+        println!("ETH");
         while let Some(data) = rx_eth.recv().await {
-            println!("hello from eth")
+            match (data) {
+                EngineCommand::UpdatePrice { price } => {
+                    eth_manager.update_price(price);
+                }
+                EngineCommand::CreateOrder {
+                    stream_id,
+                    user_id,
+                    order_type,
+                    margin,
+                    asset,
+                    leverage,
+                    slippage,
+                    is_leveraged,
+                    resp,
+                } => {
+                    let (mut tx, mut rx) = oneshot::channel();
+                    let response = eth_manager.create_order(
+                        CreateOrderReq {
+                            stream_id,
+                            user_id,
+                            order_type,
+                            margin,
+                            asset,
+                            leverage,
+                            slippage,
+                            is_leveraged,
+                        },
+                        tx,
+                    );
+                    print!("response iss {:?}", response);
+                }
+                EngineCommand::CloseOrder {
+                    stream_id,
+                    user_id,
+                    order_id,
+                    resp,
+                } => {
+                    let (mut tx, mut rx) = oneshot::channel();
+                    let response = eth_manager.close_order(
+                        CloseOrderReq {
+                            stream_id,
+                            user_id,
+                            order_id,
+                        },
+                        tx,
+                    );
+                    print!("response iss {:?}", response)
+                }
+            }
         }
     });
 
     tokio::spawn(async move {
         println!("SOl task started");
+        let mut sol_manager = Engine::new(String::from("SOL"));
         while let Some(data) = rx_sol.recv().await {
-            println!("hello from sol");
+            match (data) {
+                EngineCommand::UpdatePrice { price } => {
+                    sol_manager.update_price(price);
+                }
+                EngineCommand::CreateOrder {
+                    stream_id,
+                    user_id,
+                    order_type,
+                    margin,
+                    asset,
+                    leverage,
+                    slippage,
+                    is_leveraged,
+                    resp,
+                } => {
+                    sol_manager.create_order(CreateOrderReq {
+                        user_id,
+                        order_type,
+                        margin,
+                        asset,
+                        leverage,
+                        slippage,
+                        is_leveraged,
+                    });
+                }
+                EngineCommand::CloseOrder {
+                    stream_id,
+                    user_id,
+                    order_id,
+                    resp,
+                } => {
+                    sol_manager.close_order(CloseOrderReq { user_id, order_id });
+                }
+            }
         }
     });
 
     tokio::spawn(async move {
         println!("BTC task started");
+        let mut btc_manager = Engine::new(String::from("BTC"));
         while let Some(data) = rx_btc.recv().await {
-            println!("hello from btc");
+            match (data) {
+                EngineCommand::UpdatePrice { price } => {
+                    btc_manager.update_price(price);
+                }
+                EngineCommand::CreateOrder {
+                    stream_id,
+                    user_id,
+                    order_type,
+                    margin,
+                    asset,
+                    leverage,
+                    slippage,
+                    is_leveraged,
+                    resp,
+                } => {
+                    btc_manager.create_order(CreateOrderReq {
+                        user_id,
+                        order_type,
+                        margin,
+                        asset,
+                        leverage,
+                        slippage,
+                        is_leveraged,
+                    });
+                }
+                EngineCommand::CloseOrder {
+                    stream_id,
+                    user_id,
+                    order_id,
+                    resp,
+                } => {
+                    btc_manager.close_order(CloseOrderReq { user_id, order_id });
+                }
+            }
         }
     });
 
     let mut con = client.get_async_connection().await.unwrap();
     loop {
-        let opts = StreamReadOptions::default().block(1000);
+        let opts = StreamReadOptions::default().block(0).count(1);
         let response: redis::streams::StreamReadReply = con
             .xread_options(&[&topic], &[&offset], &opts)
             .await
             .unwrap();
-
+        print!("response is coming ");
         for stream_key in response.keys {
             for stream_id in stream_key.ids {
                 offset = stream_id.id.clone();
@@ -79,17 +193,31 @@ pub async fn redis_manager(
                         EventType::price_updates => {
                             let parsed: Result<CryptoMap, _> = serde_json::from_str(&value_data);
                             if let Ok(crypto_map) = parsed {
-                                print!("{:?}", crypto_map);
                                 for (symbol, crypto_info) in crypto_map {
                                     match symbol.as_str() {
                                         "BTC" => {
-                                            tx_btc.send(crypto_info).await.unwrap();
+                                            tx_btc
+                                                .send(EngineCommand::UpdatePrice {
+                                                    price: crypto_info.price,
+                                                })
+                                                .await
+                                                .unwrap();
                                         }
                                         "ETH" => {
-                                            tx_eth.send(crypto_info).await.unwrap();
+                                            tx_eth
+                                                .send(EngineCommand::UpdatePrice {
+                                                    price: crypto_info.price,
+                                                })
+                                                .await
+                                                .unwrap();
                                         }
                                         "SOL" => {
-                                            tx_sol.send(crypto_info).await.unwrap();
+                                            tx_sol
+                                                .send(EngineCommand::UpdatePrice {
+                                                    price: crypto_info.price,
+                                                })
+                                                .await
+                                                .unwrap();
                                         }
                                         _ => {
                                             println!("Unknown symbol: {}", symbol);
@@ -99,13 +227,46 @@ pub async fn redis_manager(
                             }
                         }
                         EventType::order_create => {
-                            // handle create order (TODO)
+                            if let Ok(order_data) =
+                                serde_json::from_str::<CreateOrderReq>(&value_data)
+                            {
+                                let (resp_tx, resp_rx) = channel();
+                                let cmd = EngineCommand::CreateOrder {
+                                    stream_id: stream_id.id.clone(),
+                                    user_id: order_data.user_id,
+                                    order_type: order_data.order_type,
+                                    margin: order_data.margin,
+                                    asset: order_data.asset,
+                                    leverage: order_data.leverage,
+                                    slippage: order_data.slippage,
+                                    is_leveraged: order_data.is_leveraged,
+                                    resp: resp_tx,
+                                };
+                                tx_btc.send(cmd).await.unwrap();
+
+                                let (id, res) = resp_rx.await.unwrap();
+                                println!("create order response for stream_id {}: {:?}", id, res);
+                            }
                         }
                         EventType::order_close => {
-                            // handle close order (TODO)
+                            if let Ok(close_data) =
+                                serde_json::from_str::<CloseOrderReq>(&value_data)
+                            {
+                                let (resp_tx, resp_rx) = channel();
+                                let cmd = EngineCommand::CloseOrder {
+                                    stream_id: stream_id.id.clone(),
+                                    user_id: close_data.user_id,
+                                    order_id: close_data.order_id,
+                                    resp: resp_tx,
+                                };
+                                tx_btc.send(cmd).await.unwrap();
+
+                                let (id, res) = resp_rx.await.unwrap();
+                                println!("close order response for stream_id {}: {:?}", id, res);
+                            }
                         }
                         EventType::unknown => {
-                            print!("unknown event")
+                            println!("unknown event");
                         }
                     }
                 }
