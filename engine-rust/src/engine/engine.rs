@@ -1,10 +1,12 @@
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::engine::error::{CloseOrderError, CreateOrderError};
 use crate::engine::types::{Balance, Order};
+use std::sync::Arc;
 use std::{collections::HashMap, error::Error};
 
-struct Engine {
+pub struct Engine {
     token: String,
     price: i64,
     lev_order: HashMap<String, Vec<Order>>,
