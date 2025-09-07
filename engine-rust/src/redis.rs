@@ -1,14 +1,14 @@
-use crate::engine::error::CreateOrderResp;
+use crate::engine::balancemanager::{BalanceManagerCommand, run_balance_manager};
+use crate::engine::error::{CloseOrderResp, CreateOrderResp};
 use crate::types::event::EventType;
-use crate::types::order::{Balance, CloseOrderReq, CreateOrderReq};
+use crate::types::order::{CloseOrderReq, CreateOrderReq};
 use crate::{engine::engine::Engine, types::order::EngineCommand};
+use redis::Commands;
 use redis::{AsyncCommands, streams::StreamReadOptions};
 use serde::{Deserialize, Serialize};
 use serde_redis::from_redis_value;
 use std::collections::HashMap;
-use tokio::sync::oneshot::channel;
 use tokio::sync::{mpsc, oneshot};
-extern crate redis;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct CryptoInfo {
@@ -19,92 +19,38 @@ struct CryptoInfo {
 
 type CryptoMap = HashMap<String, CryptoInfo>;
 
-pub async fn redis_manager(topic: String) -> () {
+pub async fn redis_manager(topic: String) {
     let client = redis::Client::open("redis://localhost:6379/").unwrap();
-    let topic = topic;
 
-    let mut offset = String::from("$");
-    let (tx_sol, mut rx_sol) = mpsc::channel::<EngineCommand>(100);
-    let (tx_eth, mut rx_eth) = mpsc::channel::<EngineCommand>(100);
-    let (tx_btc, mut rx_btc) = mpsc::channel::<EngineCommand>(100);
+    let mut send_data_1 = client.clone();
+    let mut send_data_2 = client.clone();
 
-    //thread spawn for each market
-    tokio::spawn(async move {
-        let mut eth_manager = Engine::new(String::from("ETH"));
-        println!("ETH");
-        while let Some(data) = rx_eth.recv().await {
-            match (data) {
-                EngineCommand::UpdatePrice { price } => {
-                    eth_manager.update_price(price);
-                }
-                EngineCommand::CreateOrder {
-                    stream_id,
-                    user_id,
-                    order_type,
-                    margin,
-                    asset,
-                    leverage,
-                    slippage,
-                    is_leveraged,
-                    resp,
-                } => {
-                    let (mut tx, mut rx) = oneshot::channel();
-                    let response = eth_manager.create_order(
-                        CreateOrderReq {
-                            stream_id,
-                            user_id,
-                            order_type,
-                            margin,
-                            asset,
-                            leverage,
-                            slippage,
-                            is_leveraged,
-                        },
-                        tx,
-                    );
-                    print!("response iss {:?}", response);
-                }
-                EngineCommand::CloseOrder {
-                    stream_id,
-                    user_id,
-                    order_id,
-                    resp,
-                } => {
-                    let (mut tx, mut rx) = oneshot::channel();
-                    let response = eth_manager.close_order(
-                        CloseOrderReq {
-                            stream_id,
-                            user_id,
-                            order_id,
-                        },
-                        tx,
-                    );
-                    print!("response iss {:?}", response)
-                }
-            }
-        }
-    });
+    let mut offset = "$".to_string();
 
-    tokio::spawn(async move {
-        println!("SOl task started");
-        let mut sol_manager = Engine::new(String::from("SOL"));
-        while let Some(data) = rx_sol.recv().await {
-            match (data) {
-                EngineCommand::UpdatePrice { price } => {
-                    sol_manager.update_price(price);
-                }
-                EngineCommand::CreateOrder {
-                    stream_id,
-                    user_id,
-                    order_type,
-                    margin,
-                    asset,
-                    leverage,
-                    slippage,
-                    is_leveraged,
-                    resp,
-                } => {
-                    sol_manager.create_order(CreateOrderReq {
+    let (tx_sol, rx_sol) = mpsc::channel::<EngineCommand>(100);
+    let (tx_eth, rx_eth) = mpsc::channel::<EngineCommand>(100);
+    let (tx_btc, rx_btc) = mpsc::channel::<EngineCommand>(100);
+    let (balance_tx, balance_rx) = mpsc::channel::<BalanceManagerCommand>(100);
+
+    tokio::spawn(run_balance_manager(balance_rx));
+
+    let (tx_resp_open, mut rx_resp_open) = mpsc::channel::<(String, CreateOrderResp)>(100);
+    let (tx_resp_close, mut rx_resp_close) = mpsc::channel::<(String, CloseOrderResp)>(100);
+
+    for (symbol, mut rx) in [("BTC", rx_btc), ("ETH", rx_eth), ("SOL", rx_sol)] {
+        let symbol = symbol.to_string();
+        let tx_resp_open_clone = tx_resp_open.clone();
+        let tx_resp_close_clone = tx_resp_close.clone();
+        let balance_tx_clone = balance_tx.clone();
+        tokio::spawn(async move {
+            let mut engine = Engine::new(symbol.clone(), balance_tx_clone);
+            println!("{} task started", symbol);
+
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    EngineCommand::UpdatePrice { price } => engine.update_price(price).await,
+                    EngineCommand::CreateOrder {
+                        stream_id,
                         user_id,
                         order_type,
                         margin,
@@ -112,58 +58,75 @@ pub async fn redis_manager(topic: String) -> () {
                         leverage,
                         slippage,
                         is_leveraged,
-                    });
-                }
-                EngineCommand::CloseOrder {
-                    stream_id,
-                    user_id,
-                    order_id,
-                    resp,
-                } => {
-                    sol_manager.close_order(CloseOrderReq { user_id, order_id });
+                    } => {
+                        print!("order is processing");
+                        engine
+                            .create_order(
+                                CreateOrderReq {
+                                    stream_id: stream_id.clone(),
+                                    user_id,
+                                    order_type,
+                                    margin,
+                                    asset,
+                                    leverage,
+                                    slippage,
+                                    is_leveraged,
+                                },
+                                tx_resp_open_clone.clone(),
+                            )
+                            .await;
+                    }
+                    EngineCommand::CloseOrder {
+                        stream_id,
+                        user_id,
+                        order_id,
+                        asset,
+                    } => {
+                        engine
+                            .close_order(
+                                CloseOrderReq {
+                                    stream_id: stream_id.clone(),
+                                    user_id,
+                                    order_id,
+                                    asset,
+                                },
+                                tx_resp_close_clone.clone(),
+                            )
+                            .await;
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     tokio::spawn(async move {
-        println!("BTC task started");
-        let mut btc_manager = Engine::new(String::from("BTC"));
-        while let Some(data) = rx_btc.recv().await {
-            match (data) {
-                EngineCommand::UpdatePrice { price } => {
-                    btc_manager.update_price(price);
-                }
-                EngineCommand::CreateOrder {
-                    stream_id,
-                    user_id,
-                    order_type,
-                    margin,
-                    asset,
-                    leverage,
-                    slippage,
-                    is_leveraged,
-                    resp,
-                } => {
-                    btc_manager.create_order(CreateOrderReq {
-                        user_id,
-                        order_type,
-                        margin,
-                        asset,
-                        leverage,
-                        slippage,
-                        is_leveraged,
-                    });
-                }
-                EngineCommand::CloseOrder {
-                    stream_id,
-                    user_id,
-                    order_id,
-                    resp,
-                } => {
-                    btc_manager.close_order(CloseOrderReq { user_id, order_id });
-                }
-            }
+        while let Some((stream_id, resp)) = rx_resp_open.recv().await {
+            println!("Response for stream {}: {:?}", stream_id, resp);
+
+            let _: String = send_data_1
+                .xadd(
+                    "channel-2",
+                    "*",
+                    &[
+                        ("res_id", stream_id.as_str()),
+                        ("resp", &format!("{:?}", resp)),
+                    ],
+                )
+                .unwrap();
+        }
+
+        while let Some((stream_id, resp)) = rx_resp_close.recv().await {
+            println!("Response for stream {}: {:?}", stream_id, resp);
+            let _: String = send_data_2
+                .xadd(
+                    "channel-2",
+                    "*",
+                    &[
+                        ("res_id", stream_id.as_str()),
+                        ("resp", &format!("{:?}", resp)),
+                    ],
+                )
+                .unwrap();
         }
     });
 
@@ -174,7 +137,7 @@ pub async fn redis_manager(topic: String) -> () {
             .xread_options(&[&topic], &[&offset], &opts)
             .await
             .unwrap();
-        print!("response is coming ");
+
         for stream_key in response.keys {
             for stream_id in stream_key.ids {
                 offset = stream_id.id.clone();
@@ -184,6 +147,8 @@ pub async fn redis_manager(topic: String) -> () {
                         "price_updates" => EventType::price_updates,
                         "order_create" => EventType::order_create,
                         "order_close" => EventType::order_close,
+                        "balance_get_usd" => EventType::balance_get_usd,
+                        "balance_get_all" => EventType::balance_get_balances,
                         _ => EventType::unknown,
                     };
 
@@ -194,34 +159,14 @@ pub async fn redis_manager(topic: String) -> () {
                             let parsed: Result<CryptoMap, _> = serde_json::from_str(&value_data);
                             if let Ok(crypto_map) = parsed {
                                 for (symbol, crypto_info) in crypto_map {
+                                    let cmd = EngineCommand::UpdatePrice {
+                                        price: crypto_info.price,
+                                    };
                                     match symbol.as_str() {
-                                        "BTC" => {
-                                            tx_btc
-                                                .send(EngineCommand::UpdatePrice {
-                                                    price: crypto_info.price,
-                                                })
-                                                .await
-                                                .unwrap();
-                                        }
-                                        "ETH" => {
-                                            tx_eth
-                                                .send(EngineCommand::UpdatePrice {
-                                                    price: crypto_info.price,
-                                                })
-                                                .await
-                                                .unwrap();
-                                        }
-                                        "SOL" => {
-                                            tx_sol
-                                                .send(EngineCommand::UpdatePrice {
-                                                    price: crypto_info.price,
-                                                })
-                                                .await
-                                                .unwrap();
-                                        }
-                                        _ => {
-                                            println!("Unknown symbol: {}", symbol);
-                                        }
+                                        "BTC" => tx_btc.send(cmd).await.unwrap(),
+                                        "ETH" => tx_eth.send(cmd).await.unwrap(),
+                                        "SOL" => tx_sol.send(cmd).await.unwrap(),
+                                        _ => println!("Unknown symbol: {}", symbol),
                                     }
                                 }
                             }
@@ -230,44 +175,114 @@ pub async fn redis_manager(topic: String) -> () {
                             if let Ok(order_data) =
                                 serde_json::from_str::<CreateOrderReq>(&value_data)
                             {
-                                let (resp_tx, resp_rx) = channel();
                                 let cmd = EngineCommand::CreateOrder {
                                     stream_id: stream_id.id.clone(),
                                     user_id: order_data.user_id,
                                     order_type: order_data.order_type,
                                     margin: order_data.margin,
-                                    asset: order_data.asset,
+                                    asset: order_data.asset.clone(),
                                     leverage: order_data.leverage,
                                     slippage: order_data.slippage,
                                     is_leveraged: order_data.is_leveraged,
-                                    resp: resp_tx,
                                 };
-                                tx_btc.send(cmd).await.unwrap();
-
-                                let (id, res) = resp_rx.await.unwrap();
-                                println!("create order response for stream_id {}: {:?}", id, res);
+                                match order_data.asset.as_str() {
+                                    "BTC" => tx_btc.send(cmd).await.unwrap(),
+                                    "ETH" => tx_eth.send(cmd).await.unwrap(),
+                                    "SOL" => tx_sol.send(cmd).await.unwrap(),
+                                    _ => {
+                                        println!(
+                                            "Unknown asset for order_create: {}",
+                                            order_data.asset
+                                        )
+                                    }
+                                }
                             }
                         }
                         EventType::order_close => {
                             if let Ok(close_data) =
                                 serde_json::from_str::<CloseOrderReq>(&value_data)
                             {
-                                let (resp_tx, resp_rx) = channel();
                                 let cmd = EngineCommand::CloseOrder {
                                     stream_id: stream_id.id.clone(),
                                     user_id: close_data.user_id,
+                                    asset: close_data.asset.clone(),
                                     order_id: close_data.order_id,
-                                    resp: resp_tx,
                                 };
-                                tx_btc.send(cmd).await.unwrap();
-
-                                let (id, res) = resp_rx.await.unwrap();
-                                println!("close order response for stream_id {}: {:?}", id, res);
+                                match close_data.asset.as_str() {
+                                    "BTC" => tx_btc.send(cmd).await.unwrap(),
+                                    "ETH" => tx_eth.send(cmd).await.unwrap(),
+                                    "SOL" => tx_sol.send(cmd).await.unwrap(),
+                                    _ => println!(
+                                        "Unknown asset for order_close: {}",
+                                        close_data.asset
+                                    ),
+                                }
                             }
                         }
-                        EventType::unknown => {
-                            println!("unknown event");
+                        EventType::balance_get_usd => {
+                            #[derive(Deserialize)]
+                            struct BalanceUsdReq {
+                                user_id: String,
+                            }
+
+                            if let Ok(req) = serde_json::from_str::<BalanceUsdReq>(&value_data) {
+                                let (resp_tx, resp_rx) = oneshot::channel();
+                                let _ = balance_tx
+                                    .send(BalanceManagerCommand::GetUsd {
+                                        user_id: req.user_id.clone(),
+                                        resp: resp_tx,
+                                    })
+                                    .await;
+
+                                if let Ok(usd) = resp_rx.await {
+                                    let _: String = con
+                                        .xadd(
+                                            "channel-2",
+                                            "*",
+                                            &[
+                                                ("res_id", stream_id.id.as_str()),
+                                                ("usd", &usd.to_string()),
+                                            ],
+                                        )
+                                        .await
+                                        .unwrap();
+                                }
+                            }
                         }
+                        EventType::balance_get_balances => {
+                            #[derive(Deserialize)]
+                            struct BalanceReq {
+                                user_id: String,
+                            }
+
+                            if let Ok(req) = serde_json::from_str::<BalanceReq>(&value_data) {
+                                let (resp_tx, resp_rx) = oneshot::channel();
+                                let _ = balance_tx
+                                    .send(BalanceManagerCommand::GetBalances {
+                                        user_id: req.user_id.clone(),
+                                        resp: resp_tx,
+                                    })
+                                    .await;
+
+                                if let Ok(balances) = resp_rx.await {
+                                    if let Ok(json) = serde_json::to_string(&balances) {
+                                        let _: String = con
+                                            .xadd(
+                                                "channel-2",
+                                                "*",
+                                                &[
+                                                    ("res_id", stream_id.id.as_str()),
+                                                    ("balances", &json),
+                                                ],
+                                            )
+                                            .await
+                                            .unwrap();
+                                    }
+                                }
+                            }
+                        }
+
+                        EventType::unknown => println!("Unknown event type"),
                     }
                 }
             }

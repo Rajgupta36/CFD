@@ -1,5 +1,4 @@
-use crate::engine::error::{CloseOrderResp, CreateOrderResp};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 #[derive(Debug)]
 pub struct Order {
@@ -16,13 +15,13 @@ pub struct Order {
     pub pnl: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Balance {
     pub asset: String,
     pub token: Token,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     pub balance: i64,
     pub decimal: i8,
@@ -44,6 +43,14 @@ pub struct CreateOrderReq {
 pub struct CloseOrderReq {
     pub stream_id: String,
     pub user_id: String,
+    pub asset: String,
+    pub order_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CloseOrder {
+    pub stream_id: String,
+    pub user_id: String,
     pub order_id: String,
 }
 
@@ -58,13 +65,12 @@ pub enum EngineCommand {
         leverage: i8,
         slippage: i8,
         is_leveraged: bool,
-        resp: oneshot::Sender<(String, CreateOrderResp)>,
     },
     CloseOrder {
+        asset: String,
         stream_id: String,
         user_id: String,
         order_id: String,
-        resp: oneshot::Sender<(String, CloseOrderResp)>,
     },
     UpdatePrice {
         price: i64,

@@ -1,61 +1,70 @@
-use tokio::sync::oneshot;
-
 use crate::types::order::{Balance, Token};
 use std::collections::HashMap;
+use tokio::sync::{mpsc, oneshot};
 
-pub struct BalanceManager {
-    //key userId
-    balances: HashMap<String, Vec<Balance>>,
+pub enum BalanceManagerCommand {
+    GetUsd {
+        user_id: String,
+        resp: oneshot::Sender<i64>,
+    },
+    SetUsd {
+        user_id: String,
+        amount: i64,
+        resp: oneshot::Sender<()>,
+    },
+    GetBalances {
+        user_id: String,
+        resp: oneshot::Sender<Option<Vec<Balance>>>,
+    },
 }
 
-impl BalanceManager {
-    pub fn new() -> Self {
-        Self {
-            balances: HashMap::new(),
-        }
-    }
+pub async fn run_balance_manager(mut rx: mpsc::Receiver<BalanceManagerCommand>) {
+    let mut balances: HashMap<String, Vec<Balance>> = HashMap::new();
 
-    pub fn get(&self, user_id: String, channel: oneshot::Sender<Option<Vec<Balance>>>) {
-        let data = self.balances.get(&user_id);
-        channel.send(data.cloned());
-    }
+    while let Some(cmd) = rx.recv().await {
+        match cmd {
+            BalanceManagerCommand::GetUsd { user_id, resp } => {
+                let entry = balances.entry(user_id.clone()).or_insert_with(|| {
+                    vec![Balance {
+                        asset: "usd".to_string(),
+                        token: Token {
+                            balance: 1_000_000,
+                            decimal: 4,
+                        },
+                    }]
+                });
+                let usd = entry
+                    .iter()
+                    .find(|b| b.asset == "usd")
+                    .map(|b| b.token.balance)
+                    .unwrap_or(0);
+                let _ = resp.send(usd);
+            }
 
-    pub fn get_usd(&mut self, user_id: &str, channel: oneshot::Sender<i64>) {
-        let entry = self.balances.entry(user_id.to_string()).or_insert_with(|| {
-            vec![Balance {
-                asset: "usd".to_string(),
-                token: Token {
-                    balance: 1000000,
-                    decimal: 4,
-                },
-            }]
-        });
+            BalanceManagerCommand::SetUsd {
+                user_id,
+                amount,
+                resp,
+            } => {
+                let entry = balances.entry(user_id.clone()).or_insert_with(Vec::new);
+                if let Some(balance) = entry.iter_mut().find(|b| b.asset == "usd") {
+                    balance.token.balance = amount;
+                } else {
+                    entry.push(Balance {
+                        asset: "usd".to_string(),
+                        token: Token {
+                            balance: amount,
+                            decimal: 4,
+                        },
+                    });
+                }
+                let _ = resp.send(()); // ✅ confirm update
+            }
 
-        let data = entry
-            .iter()
-            .find(|b| b.asset == "usd")
-            .map(|b| b.token.balance)
-            .unwrap_or(0);
-        channel.send(data);
-        return;
-    }
-
-    pub fn set_usd(&mut self, user_id: &str, amount: i64) {
-        let entry = self
-            .balances
-            .entry(user_id.to_string())
-            .or_insert_with(Vec::new);
-
-        if let Some(balance) = entry.iter_mut().find(|b| b.asset == "usd") {
-            balance.token.balance = amount;
-        } else {
-            entry.push(Balance {
-                asset: "usd".to_string(),
-                token: Token {
-                    balance: amount,
-                    decimal: 4,
-                },
-            });
+            BalanceManagerCommand::GetBalances { user_id, resp } => {
+                let data = balances.get(&user_id).cloned();
+                let _ = resp.send(data);
+            }
         }
     }
 }
