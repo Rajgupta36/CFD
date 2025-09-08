@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
-#[derive(Debug)]
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order {
     pub order_id: String,
     pub asset: String,
@@ -37,6 +38,12 @@ pub struct CreateOrderReq {
     pub leverage: i8,
     pub slippage: i8,
     pub is_leveraged: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetOrderReq {
+    pub stream_id: String,
+    pub user_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

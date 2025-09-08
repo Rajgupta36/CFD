@@ -1,6 +1,9 @@
 use crate::engine::balancemanager::BalanceManagerCommand;
-use crate::engine::error::{CloseOrderError, CloseOrderResp, CreateOrderError, CreateOrderResp};
-use crate::types::order::{CloseOrderReq, CreateOrderReq, Order};
+use crate::engine::error::{
+    CloseOrderError, CloseOrderResp, CreateOrderError, CreateOrderResp, GetOrderResp,
+};
+use crate::types::order::{CloseOrderReq, CreateOrderReq, GetOrderReq, Order};
+use crate::types::response::EngineResponse;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -29,14 +32,20 @@ impl Engine {
     pub async fn create_order(
         &mut self,
         req: CreateOrderReq,
-        channel: mpsc::Sender<(String, CreateOrderResp)>,
-    ) -> CreateOrderResp {
+        channel: mpsc::Sender<(String, EngineResponse)>,
+    ) {
         if req.margin <= 0 || req.leverage <= 0 || req.slippage <= 0 || self.price == 0 {
             let resp = CreateOrderResp::Error {
                 msg: CreateOrderError::IncorrectInput,
             };
-            let _ = channel.send((req.stream_id, resp.clone())).await;
-            return resp;
+            let _ = channel
+                .send((
+                    req.stream_id.clone(),
+                    EngineResponse::CreateOrder(resp.clone()),
+                ))
+                .await;
+
+            return;
         }
 
         let (tx, rx) = oneshot::channel();
@@ -53,8 +62,13 @@ impl Engine {
             let resp = CreateOrderResp::Error {
                 msg: CreateOrderError::InsufficientBalance,
             };
-            let _ = channel.send((req.stream_id, resp.clone())).await;
-            return resp;
+            let _ = channel
+                .send((
+                    req.stream_id.clone(),
+                    EngineResponse::CreateOrder(resp.clone()),
+                ))
+                .await;
+            return;
         }
 
         usd_balance -= req.margin;
@@ -103,16 +117,17 @@ impl Engine {
             order_id,
         };
         print!("order confirmed");
-        let _ = channel.send((req.stream_id, resp.clone())).await;
-        print!("order sended to res");
-        resp
+        let _ = channel
+            .send((req.stream_id, EngineResponse::CreateOrder(resp.clone())))
+            .await;
+        print!("order sended")
     }
 
     pub async fn close_order(
         &mut self,
         req: CloseOrderReq,
-        channel: mpsc::Sender<(String, CloseOrderResp)>,
-    ) -> CloseOrderResp {
+        channel: mpsc::Sender<(String, EngineResponse)>,
+    ) {
         let mut resp = CloseOrderResp::Error {
             msg: CloseOrderError::OrderFailed,
         };
@@ -159,8 +174,9 @@ impl Engine {
             }
         }
 
-        let _ = channel.send((req.stream_id, resp.clone())).await;
-        resp
+        let _ = channel
+            .send((req.stream_id, EngineResponse::CloseOrder(resp.clone())))
+            .await;
     }
 
     async fn liquidation_close(&mut self, req: CloseOrderReq) -> CloseOrderResp {
@@ -241,7 +257,28 @@ impl Engine {
         }
 
         for req in to_close {
-            let _ = self.liquidation_close(req).await;
+            self.liquidation_close(req).await;
         }
+    }
+
+    pub async fn get_open_order(
+        &mut self,
+        req: GetOrderReq,
+        channel: mpsc::Sender<(String, EngineResponse)>,
+    ) {
+        let resp = if let Some(order) = self.open_order.get(&req.user_id) {
+            GetOrderResp::Success {
+                msg: "order completed".to_string(),
+                orders: order.clone(),
+            }
+        } else {
+            GetOrderResp::Error {
+                msg: "no open orders found".to_string(),
+            }
+        };
+
+        let _ = channel
+            .send((req.stream_id, EngineResponse::GetOrder(resp)))
+            .await;
     }
 }

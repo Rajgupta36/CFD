@@ -1,7 +1,9 @@
 use crate::engine::balancemanager::{BalanceManagerCommand, run_balance_manager};
 use crate::engine::error::{CloseOrderResp, CreateOrderResp};
+use crate::types::balance;
 use crate::types::event::EventType;
 use crate::types::order::{CloseOrderReq, CreateOrderReq};
+use crate::types::response::{EngineResponse, balance_get_all, balance_get_usd_resp, usd};
 use crate::{engine::engine::Engine, types::order::EngineCommand};
 use redis::Commands;
 use redis::{AsyncCommands, streams::StreamReadOptions};
@@ -23,7 +25,6 @@ pub async fn redis_manager(topic: String) {
     let client = redis::Client::open("redis://localhost:6379/").unwrap();
 
     let mut send_data_1 = client.clone();
-    let mut send_data_2 = client.clone();
 
     let mut offset = "$".to_string();
 
@@ -31,16 +32,13 @@ pub async fn redis_manager(topic: String) {
     let (tx_eth, rx_eth) = mpsc::channel::<EngineCommand>(100);
     let (tx_btc, rx_btc) = mpsc::channel::<EngineCommand>(100);
     let (balance_tx, balance_rx) = mpsc::channel::<BalanceManagerCommand>(100);
+    let (tx_res, mut rx_res) = mpsc::channel::<(String, EngineResponse)>(100);
 
     tokio::spawn(run_balance_manager(balance_rx));
 
-    let (tx_resp_open, mut rx_resp_open) = mpsc::channel::<(String, CreateOrderResp)>(100);
-    let (tx_resp_close, mut rx_resp_close) = mpsc::channel::<(String, CloseOrderResp)>(100);
-
     for (symbol, mut rx) in [("BTC", rx_btc), ("ETH", rx_eth), ("SOL", rx_sol)] {
         let symbol = symbol.to_string();
-        let tx_resp_open_clone = tx_resp_open.clone();
-        let tx_resp_close_clone = tx_resp_close.clone();
+        let tx_res_clone = tx_res.clone();
         let balance_tx_clone = balance_tx.clone();
         tokio::spawn(async move {
             let mut engine = Engine::new(symbol.clone(), balance_tx_clone);
@@ -72,7 +70,7 @@ pub async fn redis_manager(topic: String) {
                                     slippage,
                                     is_leveraged,
                                 },
-                                tx_resp_open_clone.clone(),
+                                tx_res_clone.clone(),
                             )
                             .await;
                     }
@@ -90,7 +88,7 @@ pub async fn redis_manager(topic: String) {
                                     order_id,
                                     asset,
                                 },
-                                tx_resp_close_clone.clone(),
+                                tx_res_clone.clone(),
                             )
                             .await;
                     }
@@ -100,24 +98,9 @@ pub async fn redis_manager(topic: String) {
     }
 
     tokio::spawn(async move {
-        while let Some((stream_id, resp)) = rx_resp_open.recv().await {
+        while let Some((stream_id, resp)) = rx_res.recv().await {
             println!("Response for stream {}: {:?}", stream_id, resp);
-
             let _: String = send_data_1
-                .xadd(
-                    "channel-2",
-                    "*",
-                    &[
-                        ("res_id", stream_id.as_str()),
-                        ("resp", &format!("{:?}", resp)),
-                    ],
-                )
-                .unwrap();
-        }
-
-        while let Some((stream_id, resp)) = rx_resp_close.recv().await {
-            println!("Response for stream {}: {:?}", stream_id, resp);
-            let _: String = send_data_2
                 .xadd(
                     "channel-2",
                     "*",
@@ -224,7 +207,6 @@ pub async fn redis_manager(topic: String) {
                             struct BalanceUsdReq {
                                 user_id: String,
                             }
-
                             if let Ok(req) = serde_json::from_str::<BalanceUsdReq>(&value_data) {
                                 let (resp_tx, resp_rx) = oneshot::channel();
                                 let _ = balance_tx
@@ -235,14 +217,18 @@ pub async fn redis_manager(topic: String) {
                                     .await;
 
                                 if let Ok(usd) = resp_rx.await {
+                                    println!("balance request is coming {}", usd);
+
+                                    let payload = balance_get_usd_resp {
+                                        res: stream_id.clone().id,
+                                        payload: usd { usd: usd },
+                                    };
+
                                     let _: String = con
                                         .xadd(
                                             "channel-2",
                                             "*",
-                                            &[
-                                                ("res_id", stream_id.id.as_str()),
-                                                ("usd", &usd.to_string()),
-                                            ],
+                                            &[("data", &serde_json::to_string(&payload).unwrap())],
                                         )
                                         .await
                                         .unwrap();
@@ -257,31 +243,29 @@ pub async fn redis_manager(topic: String) {
 
                             if let Ok(req) = serde_json::from_str::<BalanceReq>(&value_data) {
                                 let (resp_tx, resp_rx) = oneshot::channel();
+
                                 let _ = balance_tx
                                     .send(BalanceManagerCommand::GetBalances {
                                         user_id: req.user_id.clone(),
                                         resp: resp_tx,
                                     })
                                     .await;
-
                                 if let Ok(balances) = resp_rx.await {
-                                    if let Ok(json) = serde_json::to_string(&balances) {
-                                        let _: String = con
-                                            .xadd(
-                                                "channel-2",
-                                                "*",
-                                                &[
-                                                    ("res_id", stream_id.id.as_str()),
-                                                    ("balances", &json),
-                                                ],
-                                            )
-                                            .await
-                                            .unwrap();
-                                    }
+                                    let resp = balance_get_all {
+                                        res: stream_id.clone().id,
+                                        payload: balances,
+                                    };
+                                    let _: String = con
+                                        .xadd(
+                                            "channel-2",
+                                            "*",
+                                            &[("data", &serde_json::to_string(&resp).unwrap())],
+                                        )
+                                        .await
+                                        .unwrap();
                                 }
                             }
                         }
-
                         EventType::unknown => println!("Unknown event type"),
                     }
                 }
