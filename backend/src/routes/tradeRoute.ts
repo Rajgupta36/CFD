@@ -1,21 +1,87 @@
 import { Router, type Request, type Response } from "express";
-const tradeRoute = Router();
-
-tradeRoute.post("/create", async (req: Request, res: Response) => {
-  //ideally it comes from middleware
-  const userId = "raj";
-  const { asset, type, margin, leverage, slippage } = req.body;
-  //zod validation here
+import { authMiddleware } from "../middleware.js";
+import redisSubscriber from "../manager/redis.js";
+const router = Router();
+router.post("/open", authMiddleware, async (req: Request, res: Response) => {
+  const userId = req.userId;
+  const { order_type, margin, asset, leverage, slippage, is_leveraged } =
+    req.body;
+  try {
+    const id = await redisSubscriber.putMessage("order_create", {
+      user_id: userId,
+      order_type,
+      margin,
+      asset,
+      leverage,
+      slippage,
+      is_leveraged,
+    });
+    if (id == null) {
+      return res.status(403).json({
+        msg: "error",
+        error: "failed to dispatch data",
+      });
+    }
+    const response: { msg: string; order_id?: string } =
+      (await redisSubscriber.waitForMessage(id)) as {
+        msg: string;
+        order_id?: string;
+      };
+    res.json({ success: true, response });
+  } catch (err: any) {
+    res.status(408).json({ error: err.message });
+  }
 });
 
-tradeRoute.post("/close", async (req: Request, res: Response) => {
-  const userId = "raj";
-  const { orderId } = req.body;
-  //zod validation here
-
-
-  return res.status(200).
-
+router.post("/close", authMiddleware, async (req: Request, res: Response) => {
+  const userId = req.userId;
+  const { order_id, asset } = req.body;
+  try {
+    const id = await redisSubscriber.putMessage("order_close", {
+      user_id: userId,
+      order_id,
+      asset,
+    });
+    if (id == null) {
+      return res.status(403).json({
+        msg: "error",
+        error: "failed to dispatch data",
+      });
+    }
+    const response: { msg: string; order_id?: string } =
+      (await redisSubscriber.waitForMessage(id)) as {
+        msg: string;
+        order_id?: string;
+      };
+    res.json({ success: true, response });
+  } catch (err: any) {
+    res.status(408).json({ error: err.message });
+  }
 });
 
-export default tradeRoute;
+router.post("/all", authMiddleware, async (req: Request, res: Response) => {
+  const userId = req.userId;
+  const { asset } = req.body;
+  try {
+    const id = await redisSubscriber.putMessage("get_order", {
+      user_id: userId,
+      asset,
+    });
+    if (id == null) {
+      return res.status(403).json({
+        msg: "error",
+        error: "failed to dispatch data",
+      });
+    }
+    const response: { msg: string; order_id?: string } =
+      (await redisSubscriber.waitForMessage(id)) as {
+        msg: string;
+        order_id?: string;
+      };
+    res.json({ success: true, response });
+  } catch (err: any) {
+    res.status(408).json({ error: err.message });
+  }
+});
+
+export default router;

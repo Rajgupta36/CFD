@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  password String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders ClosedOrder[]
+}
+
+model ClosedOrder {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type       OrderType
+  quantity   Float
+  leverage   Float
+  entryPrice Float
+  exitPrice  Float
+  pnl        Float
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id])
+
+  openedAt DateTime
+  closedAt DateTime @default(now())
+}
+
+model Asset {
+  id             String        @id @default(cuid())
+  symbol         String        @unique
+  name           String
+  imageUrl       String?
+  decimals       Int
+  existingTrades ClosedOrder[]
+}
+
+enum OrderType {
+  BUY
+  SELL
+}
