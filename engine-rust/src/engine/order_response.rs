@@ -43,6 +43,6 @@ pub enum GetOrderResp {
 
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub enum CloseOrderResp {
-    Success { msg: String, order_id: String },
+    Success { msg: String, order: Order },
     Error { msg: CloseOrderError },
 }

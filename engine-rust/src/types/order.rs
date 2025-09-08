@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
@@ -10,10 +11,10 @@ pub struct Order {
     pub leverage: i8, //user
     pub open_price: i64,
     pub close_price: Option<i64>,
-    pub quantity: i16,
+    pub quantity: Decimal,
     pub slippage: i8, //frontend
     pub user_id: String,
-    pub pnl: i64,
+    pub pnl: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ pub struct Token {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateOrderReq {
+    #[serde(skip)]
     pub stream_id: String,
     pub user_id: String,
     pub order_type: String,
@@ -42,12 +44,15 @@ pub struct CreateOrderReq {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetOrderReq {
+    #[serde(skip)]
     pub stream_id: String,
     pub user_id: String,
+    pub asset: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CloseOrderReq {
+    #[serde(skip)]
     pub stream_id: String,
     pub user_id: String,
     pub asset: String,
@@ -81,6 +86,11 @@ pub enum EngineCommand {
     },
     UpdatePrice {
         price: i64,
+    },
+    GetOrder {
+        stream_id: String,
+        user_id: String,
+        asset: String,
     },
 }
 

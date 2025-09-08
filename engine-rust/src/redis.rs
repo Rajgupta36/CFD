@@ -1,9 +1,9 @@
 use crate::engine::balancemanager::{BalanceManagerCommand, run_balance_manager};
-use crate::engine::error::{CloseOrderResp, CreateOrderResp};
-use crate::types::balance;
 use crate::types::event::EventType;
-use crate::types::order::{CloseOrderReq, CreateOrderReq};
-use crate::types::response::{EngineResponse, balance_get_all, balance_get_usd_resp, usd};
+use crate::types::order::{self, CloseOrderReq, CreateOrderReq, GetOrderReq};
+use crate::types::response::{
+    EngineResponse, OrderRes, Usd, balance_get_all, balance_get_usd_resp,
+};
 use crate::{engine::engine::Engine, types::order::EngineCommand};
 use redis::Commands;
 use redis::{AsyncCommands, streams::StreamReadOptions};
@@ -57,7 +57,7 @@ pub async fn redis_manager(topic: String) {
                         slippage,
                         is_leveraged,
                     } => {
-                        print!("order is processing");
+                        println!("open order");
                         engine
                             .create_order(
                                 CreateOrderReq {
@@ -80,6 +80,7 @@ pub async fn redis_manager(topic: String) {
                         order_id,
                         asset,
                     } => {
+                        println!("close order");
                         engine
                             .close_order(
                                 CloseOrderReq {
@@ -87,6 +88,23 @@ pub async fn redis_manager(topic: String) {
                                     user_id,
                                     order_id,
                                     asset,
+                                },
+                                tx_res_clone.clone(),
+                            )
+                            .await;
+                    }
+                    EngineCommand::GetOrder {
+                        stream_id,
+                        user_id,
+                        asset,
+                    } => {
+                        println!("get open orders");
+                        engine
+                            .get_open_order(
+                                GetOrderReq {
+                                    asset: asset,
+                                    stream_id: stream_id.clone(),
+                                    user_id,
                                 },
                                 tx_res_clone.clone(),
                             )
@@ -100,14 +118,15 @@ pub async fn redis_manager(topic: String) {
     tokio::spawn(async move {
         while let Some((stream_id, resp)) = rx_res.recv().await {
             println!("Response for stream {}: {:?}", stream_id, resp);
+            let resp = OrderRes {
+                res: stream_id.clone(),
+                payload: resp,
+            };
             let _: String = send_data_1
                 .xadd(
                     "channel-2",
                     "*",
-                    &[
-                        ("res_id", stream_id.as_str()),
-                        ("resp", &format!("{:?}", resp)),
-                    ],
+                    &[("data", &serde_json::to_string(&resp).unwrap())],
                 )
                 .unwrap();
         }
@@ -132,6 +151,7 @@ pub async fn redis_manager(topic: String) {
                         "order_close" => EventType::order_close,
                         "balance_get_usd" => EventType::balance_get_usd,
                         "balance_get_all" => EventType::balance_get_balances,
+                        "get_order" => EventType::get_order,
                         _ => EventType::unknown,
                     };
 
@@ -155,6 +175,7 @@ pub async fn redis_manager(topic: String) {
                             }
                         }
                         EventType::order_create => {
+                            println!("order coming");
                             if let Ok(order_data) =
                                 serde_json::from_str::<CreateOrderReq>(&value_data)
                             {
@@ -174,7 +195,7 @@ pub async fn redis_manager(topic: String) {
                                     "SOL" => tx_sol.send(cmd).await.unwrap(),
                                     _ => {
                                         println!(
-                                            "Unknown asset for order_create: {}",
+                                            "unknown asset for order_create: {}",
                                             order_data.asset
                                         )
                                     }
@@ -182,9 +203,11 @@ pub async fn redis_manager(topic: String) {
                             }
                         }
                         EventType::order_close => {
+                            print!("close order");
                             if let Ok(close_data) =
                                 serde_json::from_str::<CloseOrderReq>(&value_data)
                             {
+                                print!("processing order");
                                 let cmd = EngineCommand::CloseOrder {
                                     stream_id: stream_id.id.clone(),
                                     user_id: close_data.user_id,
@@ -199,6 +222,27 @@ pub async fn redis_manager(topic: String) {
                                         "Unknown asset for order_close: {}",
                                         close_data.asset
                                     ),
+                                }
+                            }
+                        }
+                        EventType::get_order => {
+                            if let Ok(order_data) = serde_json::from_str::<GetOrderReq>(&value_data)
+                            {
+                                let cmd = EngineCommand::GetOrder {
+                                    stream_id: stream_id.id.clone(),
+                                    user_id: order_data.user_id,
+                                    asset: order_data.asset.clone(),
+                                };
+                                match order_data.asset.as_str() {
+                                    "BTC" => tx_btc.send(cmd).await.unwrap(),
+                                    "ETH" => tx_eth.send(cmd).await.unwrap(),
+                                    "SOL" => tx_sol.send(cmd).await.unwrap(),
+                                    _ => {
+                                        println!(
+                                            "Unknown asset for order_create: {}",
+                                            order_data.asset
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -221,7 +265,7 @@ pub async fn redis_manager(topic: String) {
 
                                     let payload = balance_get_usd_resp {
                                         res: stream_id.clone().id,
-                                        payload: usd { usd: usd },
+                                        payload: Usd { usd: usd },
                                     };
 
                                     let _: String = con

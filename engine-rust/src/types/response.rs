@@ -1,6 +1,6 @@
 use crate::{
-    engine::error::{CloseOrderResp, CreateOrderResp, GetOrderResp},
-    types::order::{Balance, Order},
+    engine::order_response::{CloseOrderResp, CreateOrderResp, GetOrderResp},
+    types::order::Balance,
 };
 use serde::{Deserialize, Serialize};
 
@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct balance_get_usd_resp {
     pub res: String,
-    pub payload: usd,
+    pub payload: Usd,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct usd {
+pub struct Usd {
     pub usd: i64,
 }
 
@@ -23,9 +23,9 @@ pub struct balance_get_all {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct open_order {
+pub struct OrderRes {
     pub res: String,
-    pub payload: Order,
+    pub payload: EngineResponse,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
