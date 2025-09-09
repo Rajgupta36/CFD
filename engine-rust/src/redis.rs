@@ -1,12 +1,11 @@
 use crate::engine::balancemanager::{BalanceManagerCommand, run_balance_manager};
 use crate::engine::order_response::GetOrderResp;
 use crate::types::event::EventType;
-use crate::types::order::{self, CloseOrderReq, CreateOrderReq, GetOrderReq};
+use crate::types::order::{CloseOrderReq, CreateOrderReq, GetOrderReq};
 use crate::types::response::{
     EngineResponse, OrderRes, Usd, balance_get_all, balance_get_usd_resp,
 };
 use crate::{engine::engine::Engine, types::order::EngineCommand};
-use redis::Commands;
 use redis::{AsyncCommands, streams::StreamReadOptions};
 use serde::{Deserialize, Serialize};
 use serde_redis::from_redis_value;
@@ -25,7 +24,7 @@ type CryptoMap = HashMap<String, CryptoInfo>;
 pub async fn redis_manager(topic: String) {
     let client = redis::Client::open("redis://localhost:6379/").unwrap();
 
-    let mut send_data_1 = client.clone();
+    let send_data_1 = client.clone();
 
     let mut offset = "$".to_string();
 
@@ -52,10 +51,12 @@ pub async fn redis_manager(topic: String) {
                         stream_id,
                         user_id,
                         order_type,
-                        margin,
+                        quantity,
                         asset,
                         leverage,
                         slippage,
+                        stoploss,
+                        takeprofit,
                         is_leveraged,
                     } => {
                         println!("open order");
@@ -65,10 +66,12 @@ pub async fn redis_manager(topic: String) {
                                     stream_id: stream_id.clone(),
                                     user_id,
                                     order_type,
-                                    margin,
+                                    quantity,
                                     asset,
                                     leverage,
                                     slippage,
+                                    stoploss,
+                                    takeprofit,
                                     is_leveraged,
                                 },
                                 tx_res_clone.clone(),
@@ -180,17 +183,21 @@ pub async fn redis_manager(topic: String) {
                         }
                         EventType::order_create => {
                             println!("order coming");
+                            println!("{:?}", value_data);
                             if let Ok(order_data) =
                                 serde_json::from_str::<CreateOrderReq>(&value_data)
                             {
+                                println!("order serialized {:?}", order_data);
                                 let cmd = EngineCommand::CreateOrder {
                                     stream_id: stream_id.id.clone(),
                                     user_id: order_data.user_id,
                                     order_type: order_data.order_type,
-                                    margin: order_data.margin,
+                                    quantity: order_data.quantity,
                                     asset: order_data.asset.clone(),
                                     leverage: order_data.leverage,
                                     slippage: order_data.slippage,
+                                    stoploss: order_data.stoploss,
+                                    takeprofit: order_data.takeprofit,
                                     is_leveraged: order_data.is_leveraged,
                                 };
                                 match order_data.asset.as_str() {

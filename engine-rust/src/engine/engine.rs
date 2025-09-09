@@ -35,7 +35,7 @@ impl Engine {
         req: CreateOrderReq,
         channel: mpsc::Sender<(String, EngineResponse)>,
     ) {
-        if req.margin <= 0 || req.leverage <= 0 || req.slippage <= 0 || self.price == 0 {
+        if req.quantity <= 0 || req.leverage <= 0 || req.slippage <= 0 || self.price == 0 {
             let resp = CreateOrderResp::Error {
                 msg: CreateOrderError::IncorrectInput,
             };
@@ -56,9 +56,12 @@ impl Engine {
                 resp: tx,
             })
             .await;
-        let mut usd_balance = rx.await.unwrap_or(0);
-
-        if usd_balance < req.margin {
+        let usd_balance = rx.await.unwrap_or(0);
+        let require_margin = (Decimal::from(req.quantity * self.price)
+            / Decimal::from(req.leverage))
+        .to_i64()
+        .unwrap();
+        if usd_balance < require_margin {
             let resp = CreateOrderResp::Error {
                 msg: CreateOrderError::InsufficientBalance,
             };
@@ -71,34 +74,34 @@ impl Engine {
             return;
         }
 
-        usd_balance -= req.margin;
         let (tx_set, rx_set) = oneshot::channel();
         let _ = self
             .balance_tx
             .send(BalanceManagerCommand::SetUsd {
                 user_id: req.user_id.clone(),
-                amount: usd_balance,
+                amount: usd_balance - require_margin,
                 resp: tx_set,
             })
             .await;
         let _ = rx_set.await;
 
         let order_id = Uuid::new_v4().to_string();
-        let quantity =
-            (Decimal::from(req.margin) * Decimal::from(req.leverage)) / Decimal::from(self.price);
-        println!("Quantity = {}", quantity);
+
+        println!("Quantity = {}", req.quantity);
         let order = Order {
             order_id: order_id.clone(),
             asset: req.asset,
             order_type: req.order_type,
-            margin: req.margin,
+            margin: require_margin,
             leverage: req.leverage,
             open_price: self.price,
             close_price: None,
-            quantity: quantity,
+            stoploss: req.stoploss,
+            takeprofit: req.takeprofit,
+            quantity: req.quantity,
             slippage: req.slippage,
             user_id: req.user_id.clone(),
-            pnl: Decimal::ZERO,
+            pnl: 0,
         };
 
         if req.leverage > 1 {
@@ -151,7 +154,7 @@ impl Engine {
                         })
                         .await;
                     let mut usd_balance = rx.await.unwrap_or(0);
-                    usd_balance += order.margin + order.pnl.round().to_i64().unwrap();
+                    usd_balance += order.margin + order.pnl;
                     let (tx_set, rx_set) = oneshot::channel();
                     let _ = self
                         .balance_tx
@@ -201,7 +204,7 @@ impl Engine {
                     })
                     .await;
                 let mut usd_balance = rx.await.unwrap_or(0);
-                usd_balance += order.margin + order.pnl.round().to_i64().unwrap();
+                usd_balance += order.margin + order.pnl;
                 let (tx_set, rx_set) = oneshot::channel();
                 let _ = self
                     .balance_tx
@@ -231,26 +234,63 @@ impl Engine {
     pub async fn update_price(&mut self, price: i64) {
         self.price = price;
 
+        let calc_price_change = |order_type: &str, open_price: i64, price: i64| -> i64 {
+            if order_type == "buy" {
+                (price - open_price) * 100 / open_price
+            } else {
+                (open_price - price) * 100 / open_price
+            }
+        };
+
+        let mut to_close = Vec::new();
         for value in self.open_order.values_mut() {
             for order in value {
                 order.pnl = if order.order_type == "buy" {
-                    (Decimal::from(self.price) - Decimal::from(order.open_price)) * order.quantity
+                    (self.price - order.open_price) * order.quantity
                 } else {
-                    (Decimal::from(order.open_price) - Decimal::from(self.price)) * order.quantity
+                    (order.open_price - self.price) * order.quantity
                 };
+
+                let price_change =
+                    calc_price_change(&order.order_type, order.open_price, self.price);
+
+                if (order.takeprofit > 0.0 && price_change >= order.takeprofit as i64)
+                    || (order.stoploss > 0.0 && price_change <= -order.stoploss as i64)
+                {
+                    println!("order id {} sl/pl trigger", order.order_id);
+                    to_close.push(CloseOrderReq {
+                        stream_id: "".to_string(),
+                        user_id: order.user_id.clone(),
+                        order_id: order.order_id.clone(),
+                        asset: order.asset.clone(),
+                    });
+                }
             }
         }
 
-        let mut to_close = Vec::new();
         for value in self.lev_order.values_mut() {
             for order in value.iter_mut() {
                 order.pnl = if order.order_type == "buy" {
-                    (Decimal::from(self.price) - Decimal::from(order.open_price)) * order.quantity
+                    (self.price - order.open_price) * order.quantity
                 } else {
-                    (Decimal::from(order.open_price) - Decimal::from(self.price)) * order.quantity
+                    (order.open_price - self.price) * order.quantity
                 };
 
-                if order.pnl + Decimal::from(order.margin) <= Decimal::ZERO {
+                let price_change =
+                    calc_price_change(&order.order_type, order.open_price, self.price);
+
+                if order.pnl + order.margin <= 0 {
+                    println!("order id {} liquidate trigger", order.order_id);
+                    to_close.push(CloseOrderReq {
+                        stream_id: "".to_string(),
+                        user_id: order.user_id.clone(),
+                        order_id: order.order_id.clone(),
+                        asset: order.asset.clone(),
+                    });
+                } else if (order.takeprofit > 0.0 && price_change >= order.takeprofit as i64)
+                    || (order.stoploss > 0.0 && price_change <= -order.stoploss as i64)
+                {
+                    println!("order id {} sl/pl trigger", order.order_id);
                     to_close.push(CloseOrderReq {
                         stream_id: "".to_string(),
                         user_id: order.user_id.clone(),

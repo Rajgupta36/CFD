@@ -65,6 +65,7 @@ export default function OpenPositionsPanel() {
             <div className="flex items-center gap-2 text-xs font-medium">
               <div className="flex-1 min-w-[80px]">Asset</div>
               <div className="flex-1 min-w-[60px]">Type</div>
+              <div className="flex-1 min-w-[60px]">Quantity</div>
               <div className="flex-1 min-w-[60px]">Margin</div>
               <div className="flex-1 min-w-[60px]">Leverage</div>
               <div className="flex-1 min-w-[80px]">Buy Price</div>
@@ -94,6 +95,9 @@ export default function OpenPositionsPanel() {
                     {order.order_type.toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-[60px] text-gray-300 truncate">
+                    {order.quantity.toFixed(2)}
+                  </div>
+                  <div className="flex-1 min-w-[60px] text-gray-300 truncate">
                     {intToDecimal(order.margin, 4, 4).toFixed(2)}
                   </div>
                   <div className="flex-1 min-w-[60px] text-gray-300 truncate">
@@ -110,8 +114,8 @@ export default function OpenPositionsPanel() {
                     }`}
                   >
                     {order.pnl >= 0
-                      ? `+${intToDecimal(order.pnl, 0, 4)}`
-                      : intToDecimal(order.pnl, 0, 4)}
+                      ? `+${intToDecimal(order.pnl, 2, 4)}`
+                      : intToDecimal(order.pnl, 2, 4)}
                   </div>
                   {/*<div className="flex-1 min-w-[120px] text-gray-400 text-xs truncate">
                     {formatTimestamp(order.timestamp)}

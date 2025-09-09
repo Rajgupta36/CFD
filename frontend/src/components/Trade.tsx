@@ -16,7 +16,7 @@ export default function OrderForm() {
   const { balance, setBalance } = useBalance();
   const [isBuy, setIsBuy] = useState(true);
   const [leverage, setLeverage] = useState(1);
-  const [margin, setmargin] = useState<number>();
+  const [quantity, setmargin] = useState<number>();
   const [stoploss, setStoploss] = useState<number>();
   const [takeprofit, setTakeprofit] = useState<number>();
   const [error, setError] = useState<string>("");
@@ -25,8 +25,8 @@ export default function OrderForm() {
   const asset = data.find((p) => p.symbol === symbol);
 
   const validateForm = () => {
-    if (!margin || margin <= 0) {
-      return "Margin must be greater than 0";
+    if (!quantity || quantity <= 0) {
+      return "quantity must be greater than 0";
     }
     return "";
   };
@@ -45,12 +45,12 @@ export default function OrderForm() {
     try {
       const data = await createOrder(
         order_type,
-        margin!,
+        quantity!,
         symbol,
         1,
         leverage,
-        // stoploss ? stoploss : 0,
-        // takeprofit ? takeprofit : 0,
+        stoploss ? stoploss : 0,
+        takeprofit ? takeprofit : 0,
       );
       if (data?.response.CreateOrder.status == "Success") {
         toast.success("Order executed successfully", {
@@ -139,15 +139,15 @@ export default function OrderForm() {
 
       <div className="px-4 pb-4 flex-1 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          <label htmlFor="margin" className="text-sm font-medium">
-            margin
+          <label htmlFor="quantity" className="text-sm font-medium">
+            quantity
           </label>
           <Input
-            id="margin"
+            id="quantity"
             type="number"
-            value={margin}
+            value={quantity}
             onChange={(e) => setmargin(Number(e.target.value))}
-            placeholder="Enter margin"
+            placeholder="Enter quantity"
             inputMode="decimal"
             className={cn(
               "w-full",
@@ -157,7 +157,7 @@ export default function OrderForm() {
           {error ? (
             <p className="text-xs text-red-500">{error}</p>
           ) : (
-            <div id="margin-help" className="text-xs text-muted-foreground">
+            <div id="quantity-help" className="text-xs text-muted-foreground">
               Enter order size. <br />
               Available balance: {balance.free.toFixed(2)}
             </div>
@@ -232,8 +232,8 @@ export default function OrderForm() {
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-muted-foreground">margin</span>
-            <span className="font-medium">{margin}</span>
+            <span className="text-muted-foreground">quantity</span>
+            <span className="font-medium">{quantity}</span>
           </div>
           <div className="mt-2 flex items-center justify-between">
             <span className="text-muted-foreground">Leverage</span>

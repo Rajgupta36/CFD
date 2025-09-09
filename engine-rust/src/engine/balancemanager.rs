@@ -17,7 +17,6 @@ pub enum BalanceManagerCommand {
         resp: oneshot::Sender<Option<Vec<Balance>>>,
     },
 }
-
 pub async fn run_balance_manager(mut rx: mpsc::Receiver<BalanceManagerCommand>) {
     let mut balances: HashMap<String, Vec<Balance>> = HashMap::new();
 

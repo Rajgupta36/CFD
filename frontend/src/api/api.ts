@@ -22,13 +22,13 @@ export async function getUserBalance() {
 
 export async function createOrder(
   order_type: string,
-  margin: number,
+  quantity: number,
   asset: string,
   slippage: number,
   leverage: number,
+  stoploss: number,
+  takeprofit: number,
   // price: number,
-  // stoploss: number,
-  // takeprofit: number,
 ) {
   const data = await fetch(`http://localhost:3000/api/v1/trade/open`, {
     method: "POST",
@@ -38,10 +38,12 @@ export async function createOrder(
     },
     body: JSON.stringify({
       order_type,
-      margin,
+      quantity,
       asset: normalize(asset),
       leverage,
       slippage,
+      stoploss,
+      takeprofit,
       is_leveraged: leverage > 1 ? true : false,
     }),
   });
@@ -56,26 +58,19 @@ export async function getOpenOrders() {
     "Content-Type": "application/json",
   };
 
-  const assets = ["BTC", "ETH", "SOL"];
+  let asset = "SOL";
+  const res = await fetch("http://localhost:3000/api/v1/trade/all", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ asset: "SOL" }),
+  });
 
-  const responses = await Promise.all(
-    assets.map(async (asset) => {
-      const res = await fetch("http://localhost:3000/api/v1/trade/all", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ asset }),
-      });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${asset} orders: ${res.statusText}`);
+  }
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch ${asset} orders: ${res.statusText}`);
-      }
-
-      const json = await res.json();
-      return json.response?.GetOrder?.details?.orders ?? [];
-    }),
-  );
-  console.log(responses.flat());
-  return responses.flat();
+  const json = await res.json();
+  return json.response?.GetOrder?.details?.orders ?? [];
 }
 
 export async function closeOrderServer(symbol: string, orderId: string) {

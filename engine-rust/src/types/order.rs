@@ -12,13 +12,13 @@ pub struct Order {
     pub margin: i64,  //user will provide
     pub leverage: i8, //user
     pub open_price: i64,
-    // pub stoploss: i16, //in per
-    // pub takeprofit: i16,
+    pub stoploss: f32, //in per
+    pub takeprofit: f32,
     pub close_price: Option<i64>,
-    pub quantity: Decimal,
+    pub quantity: i64,
     pub slippage: i8, //frontend
     pub user_id: String,
-    pub pnl: Decimal,
+    pub pnl: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,10 +39,12 @@ pub struct CreateOrderReq {
     pub stream_id: String,
     pub user_id: String,
     pub order_type: String,
-    pub margin: i64,
+    pub quantity: i64,
     pub asset: String,
     pub leverage: i8,
     pub slippage: i8,
+    pub stoploss: f32,
+    pub takeprofit: f32,
     pub is_leveraged: bool,
 }
 
@@ -76,7 +78,9 @@ pub enum EngineCommand {
         stream_id: String,
         user_id: String,
         order_type: String,
-        margin: i64,
+        quantity: i64,
+        stoploss: f32,
+        takeprofit: f32,
         asset: String,
         leverage: i8,
         slippage: i8,

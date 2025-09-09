@@ -53,7 +53,7 @@ async function main() {
           quantity: tillndigit(trade.q, 2),
           T: trade.T,
           bid: tillndigit(String(parseFloat(trade.p) * 1.005), 2),
-          ask: tillndigit(String(parseFloat(trade.p) * 0.995), 2),
+          ask: tillndigit(String(parseFloat(trade.p)), 2),
         }),
       );
       switch (trade.s) {

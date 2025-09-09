@@ -22,7 +22,7 @@ export const useOpenOrders = create<OpenOrderType>((set) => ({
         const pnl =
           order.order_type === "buy"
             ? (price - order.open_price / 100) * order.quantity
-            : (order.open_price - price / 100) * order.quantity;
+            : (order.open_price / 100 - price) * order.quantity;
         console.log("updated pnl", pnl);
         return {
           ...order,

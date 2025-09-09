@@ -4,16 +4,26 @@ import redisSubscriber from "../manager/redis.js";
 const router = Router();
 router.post("/open", authMiddleware, async (req: Request, res: Response) => {
   const userId = req.userId;
-  const { order_type, margin, asset, leverage, slippage, is_leveraged } =
-    req.body;
+  const {
+    order_type,
+    quantity,
+    asset,
+    leverage,
+    slippage,
+    stoploss,
+    takeprofit,
+    is_leveraged,
+  } = req.body;
   try {
     const id = await redisSubscriber.putMessage("order_create", {
       user_id: userId,
       order_type,
-      margin: margin * 10000,
+      quantity: quantity,
       asset,
       leverage,
       slippage,
+      stoploss,
+      takeprofit,
       is_leveraged,
     });
     if (id == null) {
