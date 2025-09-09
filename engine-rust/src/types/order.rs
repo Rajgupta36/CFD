@@ -2,6 +2,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
+use crate::types::response::EngineResponse;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order {
     pub order_id: String,
@@ -10,8 +12,8 @@ pub struct Order {
     pub margin: i64,  //user will provide
     pub leverage: i8, //user
     pub open_price: i64,
-    pub stoploss: i16, //in per
-    pub takeprofit: i16,
+    // pub stoploss: i16, //in per
+    // pub takeprofit: i16,
     pub close_price: Option<i64>,
     pub quantity: Decimal,
     pub slippage: i8, //frontend
@@ -93,6 +95,7 @@ pub enum EngineCommand {
         stream_id: String,
         user_id: String,
         asset: String,
+        resp: oneshot::Sender<EngineResponse>,
     },
 }
 

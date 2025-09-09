@@ -1,4 +1,5 @@
 use crate::engine::balancemanager::{BalanceManagerCommand, run_balance_manager};
+use crate::engine::order_response::GetOrderResp;
 use crate::types::event::EventType;
 use crate::types::order::{self, CloseOrderReq, CreateOrderReq, GetOrderReq};
 use crate::types::response::{
@@ -97,16 +98,17 @@ pub async fn redis_manager(topic: String) {
                         stream_id,
                         user_id,
                         asset,
+                        resp,
                     } => {
-                        println!("get open orders");
+                        println!("get open orders for {}", asset);
                         engine
                             .get_open_order(
                                 GetOrderReq {
-                                    asset: asset,
+                                    asset,
                                     stream_id: stream_id.clone(),
                                     user_id,
                                 },
-                                tx_res_clone.clone(),
+                                resp,
                             )
                             .await;
                     }
@@ -122,12 +124,14 @@ pub async fn redis_manager(topic: String) {
                 res: stream_id.clone(),
                 payload: resp,
             };
-            let _: String = send_data_1
+            let mut con = send_data_1.get_async_connection().await.unwrap();
+            let _: String = con
                 .xadd(
                     "channel-2",
                     "*",
                     &[("data", &serde_json::to_string(&resp).unwrap())],
                 )
+                .await
                 .unwrap();
         }
     });
@@ -228,24 +232,60 @@ pub async fn redis_manager(topic: String) {
                         EventType::get_order => {
                             if let Ok(order_data) = serde_json::from_str::<GetOrderReq>(&value_data)
                             {
-                                let cmd = EngineCommand::GetOrder {
-                                    stream_id: stream_id.id.clone(),
-                                    user_id: order_data.user_id,
-                                    asset: order_data.asset.clone(),
-                                };
-                                match order_data.asset.as_str() {
-                                    "BTC" => tx_btc.send(cmd).await.unwrap(),
-                                    "ETH" => tx_eth.send(cmd).await.unwrap(),
-                                    "SOL" => tx_sol.send(cmd).await.unwrap(),
-                                    _ => {
-                                        println!(
-                                            "Unknown asset for order_create: {}",
-                                            order_data.asset
-                                        )
+                                let mut responses = Vec::new();
+
+                                for (asset, tx) in
+                                    [("BTC", &tx_btc), ("ETH", &tx_eth), ("SOL", &tx_sol)]
+                                {
+                                    let (resp_tx, resp_rx) = oneshot::channel();
+
+                                    let cmd = EngineCommand::GetOrder {
+                                        stream_id: stream_id.id.clone(),
+                                        user_id: order_data.user_id.clone(),
+                                        asset: asset.to_string(),
+                                        resp: resp_tx,
+                                    };
+
+                                    tx.send(cmd).await.unwrap();
+
+                                    if let Ok(engine_resp) = resp_rx.await {
+                                        match engine_resp {
+                                            EngineResponse::GetOrder(get_order_resp) => {
+                                                responses.push(get_order_resp);
+                                            }
+                                            _ => {}
+                                        }
                                     }
                                 }
+
+                                let combined_orders: Vec<_> = responses
+                                    .into_iter()
+                                    .filter_map(|r| match r {
+                                        GetOrderResp::Success { orders, .. } => Some(orders),
+                                        _ => None,
+                                    })
+                                    .flatten()
+                                    .collect();
+
+                                let resp = OrderRes {
+                                    res: stream_id.id.clone(),
+                                    payload: EngineResponse::GetOrder(GetOrderResp::Success {
+                                        msg: "aggregated orders".to_string(),
+                                        orders: combined_orders,
+                                    }),
+                                };
+
+                                let _: String = con
+                                    .xadd(
+                                        "channel-2",
+                                        "*",
+                                        &[("data", &serde_json::to_string(&resp).unwrap())],
+                                    )
+                                    .await
+                                    .unwrap();
                             }
                         }
+
                         EventType::balance_get_usd => {
                             #[derive(Deserialize)]
                             struct BalanceUsdReq {

@@ -269,19 +269,18 @@ impl Engine {
     pub async fn get_open_order(
         &mut self,
         req: GetOrderReq,
-        channel: mpsc::Sender<(String, EngineResponse)>,
+        resp: oneshot::Sender<EngineResponse>,
     ) {
         let mut all_orders = Vec::new();
 
         if let Some(open_orders) = self.open_order.get(&req.user_id) {
             all_orders.extend(open_orders.iter().cloned());
         }
-
         if let Some(lev_orders) = self.lev_order.get(&req.user_id) {
             all_orders.extend(lev_orders.iter().cloned());
         }
 
-        let resp = if !all_orders.is_empty() {
+        let resp_data = if !all_orders.is_empty() {
             GetOrderResp::Success {
                 msg: "orders retrieved successfully".to_string(),
                 orders: all_orders,
@@ -293,8 +292,6 @@ impl Engine {
             }
         };
 
-        let _ = channel
-            .send((req.stream_id, EngineResponse::GetOrder(resp)))
-            .await;
+        let _ = resp.send(EngineResponse::GetOrder(resp_data));
     }
 }
