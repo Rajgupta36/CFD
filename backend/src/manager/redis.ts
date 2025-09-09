@@ -1,6 +1,6 @@
-import { v4 as uuidv4 } from "uuid";
 import { Redis } from "ioredis";
 
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 export class redisSubscriber {
   private static instance: redisSubscriber;
   private client_read: Redis;
@@ -8,8 +8,8 @@ export class redisSubscriber {
   private callbacks: Map<string, (value: unknown) => void>;
 
   private constructor() {
-    this.client_read = new Redis("redis://localhost:6379");
-    this.client_write = new Redis("redis://localhost:6379");
+    this.client_read = new Redis(REDIS_URL);
+    this.client_write = new Redis(REDIS_URL);
     this.callbacks = new Map();
     this.runLoop();
   }

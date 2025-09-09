@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 
-const resend = new Resend("re_NHhjgVq1_3a3MRU825JVMHdn2gt4w3Qn7");
+const MAIL_SECRET = process.env.MAIL_SECRET;
+const resend = new Resend(MAIL_SECRET);
 
 export async function sendmail(to: string, link: string) {
   const data = await resend.emails.send({

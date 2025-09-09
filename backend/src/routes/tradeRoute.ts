@@ -10,7 +10,7 @@ router.post("/open", authMiddleware, async (req: Request, res: Response) => {
     const id = await redisSubscriber.putMessage("order_create", {
       user_id: userId,
       order_type,
-      margin,
+      margin: margin * 1000,
       asset,
       leverage,
       slippage,
@@ -27,7 +27,7 @@ router.post("/open", authMiddleware, async (req: Request, res: Response) => {
         msg: string;
         order_id?: string;
       };
-    res.json({ success: true, response });
+    res.json({ response });
   } catch (err: any) {
     res.status(408).json({ error: err.message });
   }
