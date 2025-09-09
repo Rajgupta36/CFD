@@ -1,7 +1,7 @@
 import { Redis } from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-export class redisSubscriber {
+class redisSubscriber {
   private static instance: redisSubscriber;
   private client_read: Redis;
   private client_write: Redis;

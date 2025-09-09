@@ -16,8 +16,8 @@ router.post("/", async (req: Request, res: Response) => {
     id,
   )) as { usd: string };
 
-  return res.status(400).json({
-    msg: `balance is ${response.usd}`,
+  return res.status(200).json({
+    balance: `${response.usd}`,
   });
 });
 

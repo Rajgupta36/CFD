@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "response": {
+    "CloseOrder": {
+      "Success": {
+        "msg": "order completed",
+        "order": {
+          "order_id": "e3bca427-5087-41a8-b193-5a1a3af897ca",
+          "asset": "BTC",
+          "order_type": "buy",
+          "margin": 1000,
+          "leverage": 100,
+          "open_price": 1128409000,
+          "close_price": 1128652000,
+          "quantity": "0.0000886203495363826414004142",
+          "slippage": 1,
+          "user_id": "cmfc2ws890000gbxz4al3u08l",
+          "pnl": "21.534744937340981860300650600"
+        }
+      }
+    }
+  }
+}

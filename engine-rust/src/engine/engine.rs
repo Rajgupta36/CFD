@@ -287,8 +287,9 @@ impl Engine {
                 orders: all_orders,
             }
         } else {
-            GetOrderResp::Error {
+            GetOrderResp::Success {
                 msg: "no open orders found".to_string(),
+                orders: Vec::new(),
             }
         };
 

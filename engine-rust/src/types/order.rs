@@ -10,6 +10,8 @@ pub struct Order {
     pub margin: i64,  //user will provide
     pub leverage: i8, //user
     pub open_price: i64,
+    pub stoploss: i16, //in per
+    pub takeprofit: i16,
     pub close_price: Option<i64>,
     pub quantity: Decimal,
     pub slippage: i8, //frontend

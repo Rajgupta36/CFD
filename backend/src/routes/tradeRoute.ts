@@ -10,7 +10,7 @@ router.post("/open", authMiddleware, async (req: Request, res: Response) => {
     const id = await redisSubscriber.putMessage("order_create", {
       user_id: userId,
       order_type,
-      margin: margin * 1000,
+      margin: margin * 10000,
       asset,
       leverage,
       slippage,

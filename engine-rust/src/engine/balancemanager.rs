@@ -28,7 +28,7 @@ pub async fn run_balance_manager(mut rx: mpsc::Receiver<BalanceManagerCommand>) 
                     vec![Balance {
                         asset: "usd".to_string(),
                         token: Token {
-                            balance: 1_000_000,
+                            balance: 100000000,
                             decimal: 4,
                         },
                     }]
