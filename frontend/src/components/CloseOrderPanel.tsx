@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { getClosedOrders } from '../api/api';
-import { intToDecimal } from '../utils/formatter';
-import type { ClosedOrder } from '../type/order';
+import { useEffect, useState } from "react";
+import { getClosedOrders } from "../api/api";
+import { intToDecimal } from "../utils/formatter";
+import type { ClosedOrder } from "../type/order";
 
 function formatTimestamp(ts: number) {
   const date = new Date(ts);
@@ -17,9 +17,10 @@ export default function ClosedOrdersPanel() {
       try {
         setLoading(true);
         const data = await getClosedOrders();
-        setClosedOrders(data.closedTrades);
+        console.log(data);
+        setClosedOrders(data);
       } catch (err) {
-        console.error('Error fetching closed orders:', err);
+        console.error("Error fetching closed orders:", err);
       } finally {
         setLoading(false);
       }
@@ -47,7 +48,7 @@ export default function ClosedOrdersPanel() {
               <div className="flex-1 min-w-[70px]">Leverage</div>
               <div className="flex-1 min-w-[80px]">Stoploss</div>
               <div className="flex-1 min-w-[80px]">Takeprofit</div>
-              <div className="flex-1 min-w-[120px]">Opened At</div>
+
               <div className="flex-1 min-w-[120px]">Closed At</div>
             </div>
           </div>
@@ -63,9 +64,9 @@ export default function ClosedOrdersPanel() {
                   </div>
                   <div
                     className={`flex-1 min-w-[60px] font-semibold truncate ${
-                      order.type === 'buy'
-                        ? 'text-market-green'
-                        : 'text-market-red'
+                      order.type === "BUY"
+                        ? "text-market-green"
+                        : "text-market-red"
                     }`}
                   >
                     {order.type.toUpperCase()}
@@ -74,22 +75,22 @@ export default function ClosedOrdersPanel() {
                     {order.quantity}
                   </div>
                   <div className="flex-1 min-w-[80px] text-gray-300 truncate">
-                    {intToDecimal(order.openPrice, 2, 2)}
+                    {intToDecimal(order.entryPrice, 4, 2)}
                   </div>
                   <div className="flex-1 min-w-[80px] text-gray-300 truncate">
-                    {intToDecimal(order.closePrice, 2, 2)}
+                    {intToDecimal(order.exitPrice, 4, 2)}
                   </div>
                   <div
                     className={`flex-1 min-w-[80px] font-semibold truncate ${
-                      order.pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                      order.pnl >= 0 ? "text-green-400" : "text-red-400"
                     }`}
                   >
                     {order.pnl >= 0
-                      ? `+${intToDecimal(order.pnl, 2, 2)}`
-                      : intToDecimal(order.pnl, 2, 2)}
+                      ? `+${intToDecimal(order.pnl, 4, 4)}`
+                      : intToDecimal(order.pnl, 4, 4)}
                   </div>
                   <div className="flex-1 min-w-[70px] text-gray-300 truncate">
-                    {order.isLeveraged ? `${order.leverage}x` : '—'}
+                    {order.leverage ? `${order.leverage}x` : "—"}
                   </div>
                   <div className="flex-1 min-w-[80px] text-gray-300 truncate">
                     {intToDecimal(order.stoploss, 2, 2)}
@@ -98,10 +99,7 @@ export default function ClosedOrdersPanel() {
                     {intToDecimal(order.takeprofit, 2, 2)}
                   </div>
                   <div className="flex-1 min-w-[120px] text-gray-400 text-xs truncate">
-                    {formatTimestamp(order.timestamp)}
-                  </div>
-                  <div className="flex-1 min-w-[120px] text-gray-400 text-xs truncate">
-                    {formatTimestamp(order.closeTimestamp)}
+                    {formatTimestamp(order.closedAt)}
                   </div>
                 </div>
               </div>

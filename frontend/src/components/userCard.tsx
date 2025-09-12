@@ -56,14 +56,6 @@ const UserCard = () => {
               <span>Balance = </span>
               <span>${intToDecimal(balance.balance, 4, 4)}</span>
             </div>
-            <div>
-              <span>Free = </span>
-              <span>${intToDecimal(balance.free, 2, 2)}</span>
-            </div>
-            <div>
-              <span>Margin = </span>
-              <span>${intToDecimal(balance.margin, 2, 2)}</span>
-            </div>
           </div>
         </div>
       )}

@@ -19,31 +19,25 @@ model User {
 }
 
 model ClosedOrder {
-  id     String @id @default(cuid())
+  id    String @id @default(cuid())
+  asset String
+
+  type       OrderType
+  margin     Float
+  leverage   Float
+  entryPrice Float
+  stoploss   Float
+  takeprofit Float
+  exitPrice  Float
+  quantity   Float
+  slippage   Float
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  type       OrderType
-  quantity   Float
-  leverage   Float
-  entryPrice Float
-  exitPrice  Float
-  pnl        Float
-
-  assetId String
-  asset   Asset  @relation(fields: [assetId], references: [id])
-
+  pnl      Float
   openedAt DateTime
   closedAt DateTime @default(now())
-}
-
-model Asset {
-  id             String        @id @default(cuid())
-  symbol         String        @unique
-  name           String
-  imageUrl       String?
-  decimals       Int
-  existingTrades ClosedOrder[]
 }
 
 enum OrderType {

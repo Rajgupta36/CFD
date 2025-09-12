@@ -1,14 +1,15 @@
 import Cookies from "js-cookie";
+const ORIGIN = import.meta.env.VITE_BACKEND_URL;
 export async function getKLineData(asset: string, duration: string) {
   const data = await fetch(
-    `http://localhost:3000/api/v1/candles?asset=${asset.toLowerCase()}&duration=${duration}`,
+    `${ORIGIN}/api/v1/candles?asset=${asset.toLowerCase()}&duration=${duration}`,
   );
 
   return data;
 }
 
 export async function getUserBalance() {
-  const data = await fetch(`http://localhost:3000/api/v1/balance`, {
+  const data = await fetch(`${ORIGIN}/api/v1/balance`, {
     headers: {
       Authorization: `Bearer ${Cookies.get("authorization")}`,
       "Content-Type": "application/json",
@@ -30,7 +31,7 @@ export async function createOrder(
   takeprofit: number,
   // price: number,
 ) {
-  const data = await fetch(`http://localhost:3000/api/v1/trade/open`, {
+  const data = await fetch(`${ORIGIN}/api/v1/trade/open`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${Cookies.get("authorization")}`,
@@ -59,7 +60,7 @@ export async function getOpenOrders() {
   };
 
   let asset = "SOL";
-  const res = await fetch("http://localhost:3000/api/v1/trade/all", {
+  const res = await fetch(`${ORIGIN}/api/v1/trade/all`, {
     method: "POST",
     headers,
     body: JSON.stringify({ asset: "SOL" }),
@@ -74,7 +75,7 @@ export async function getOpenOrders() {
 }
 
 export async function closeOrderServer(symbol: string, orderId: string) {
-  const data = await fetch(`http://localhost:3000/api/v1/trade/close`, {
+  const data = await fetch(`${ORIGIN}/api/v1/trade/close`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${Cookies.get("authorization")}`,
@@ -91,9 +92,10 @@ export async function closeOrderServer(symbol: string, orderId: string) {
 }
 
 export async function getClosedOrders() {
-  const data = await fetch("http://localhost:3000/api/v1/trade/closed_trades", {
+  const data = await fetch(`${ORIGIN}/api/v1/trade/closeOrders`, {
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      Authorization: `Bearer ${Cookies.get("authorization")}`,
+      "Content-Type": "application/json",
     },
   });
 

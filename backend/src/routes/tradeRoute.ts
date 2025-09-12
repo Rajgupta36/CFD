@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { authMiddleware } from "../middleware.js";
 import redisSubscriber from "../manager/redis.js";
+import { closeOrder } from "../controller/closeTrade.js";
+import { prisma } from "../manager/db.js";
 const router = Router();
 router.post("/open", authMiddleware, async (req: Request, res: Response) => {
   const userId = req.userId;
@@ -63,6 +65,10 @@ router.post("/close", authMiddleware, async (req: Request, res: Response) => {
         msg: string;
         order_id?: string;
       };
+    //@ts-ignore
+    let data_to_save = response?.CloseOrder?.Success.order;
+    await closeOrder(data_to_save);
+
     res.json({ success: true, response });
   } catch (err: any) {
     res.status(408).json({ error: err.message });
@@ -88,10 +94,28 @@ router.post("/all", authMiddleware, async (req: Request, res: Response) => {
         msg: string;
         order_id?: string;
       };
+
     res.json({ success: true, response });
   } catch (err: any) {
     res.status(408).json({ error: err.message });
   }
 });
+
+router.get(
+  "/closeOrders",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const userId = req.userId;
+    try {
+      const orders = await prisma.closedOrder.findMany({
+        where: { userId: userId! },
+      });
+      res.json(orders);
+    } catch (err) {
+      console.error("Error fetching closed orders:", err);
+      res.status(400).json({ error: "Failed to fetch closed orders" });
+    }
+  },
+);
 
 export default router;

@@ -12,6 +12,7 @@ import {
 import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
+  const ORIGIN = import.meta.env.VITE_BACKEND_URL;
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -29,8 +30,8 @@ export default function Login() {
 
     try {
       const url = isLogin
-        ? "http://localhost:3000/api/v1/user/signin"
-        : "http://localhost:3000/api/v1/user/signup";
+        ? `${ORIGIN}/api/v1/user/signin`
+        : `${ORIGIN}/api/v1/user/signup`;
 
       const res = await fetch(url, {
         method: "POST",
@@ -52,7 +53,7 @@ export default function Login() {
             window.location.href = "/market";
           }, 2000);
         } else {
-          toast.error(data.error || "Login failed", {
+          toast.error(data.msg, {
             position: "top-center",
             closeButton: true,
           });
@@ -66,7 +67,7 @@ export default function Login() {
           setIsLogin(true);
           setFormData({ email: "", password: "" });
         } else {
-          toast.error(data.message || "Signup failed", {
+          toast.error(data.msg || "Signup failed", {
             position: "top-center",
             closeButton: true,
           });
