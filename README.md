@@ -139,8 +139,3 @@ Don't forget to give the project a star! Thank you!
 ## License
 
 This project is distributed under the MIT License. See the `LICENSE` file for full details.
-
-## Contact
-
-Your Name - [your_email@example.com]
-Project Link: [https://github.com/your_username/project-202](https://github.com/your_username/project-202)
