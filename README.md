@@ -4,6 +4,12 @@
 
 https://github.com/user-attachments/assets/ba1a7774-9f39-45d5-bc84-4d497d6b75a7
 
+## Architecture
+
+<img width="3053" height="1930" alt="Untitled-2025-09-24-1312" src="https://github.com/user-attachments/assets/fcd341a6-e6f2-4dcb-9da4-c729d1eec873" />
+
+
+
 ## Description
 
 This is a CFD (Contract for Difference) trading platform designed for real-time market interactions. It features a high-performance **Rust engine** for critical calculations, **TypeScript-based microservices** for real-time data polling and WebSocket communication, and a dynamic **React frontend** for user interaction. The platform leverages Redis Streams for efficient event handling to ensure live and accurate data updates.
@@ -42,75 +48,25 @@ Make sure you have these installed on your computer:
 - Redis Server (version 5.0 or newer for Redis Streams)
 - Git
 
+
 ### Setup
 
-1.  **Clone the project:**
+1. **Clone the project:**
 
     ```bash
     git clone https://github.com/your_username/project-202.git
     cd project-202
     ```
 
-2.  **Start Redis Server:**
-    Ensure your Redis server is running. It's essential for the Polling Server and for real-time event communication.
+2. **Start all services:**
 
-3.  **Install dependencies and build each part of the project:**
-    - **Backend:**
+    ```bash
+    docker-compose up
+    ```
 
-      ```bash
-      cd backend
-      npm install # or yarn install
-      # To run: npm start # or node index.js
-      cd ..
-      ```
+    _This will build and start the backend, frontend, Rust engine, mailing service, polling server, and WebSocket server automatically._
 
-    - **Frontend:**
-
-      ```bash
-      cd frontend
-      npm install # or yarn install
-      # To run: npm start # (This starts the development server)
-      cd ..
-      ```
-
-    - **Engine (Rust):**
-
-      ```bash
-      cd engine-rust
-      cargo build --release # Build for best performance
-      # To run: cargo run # or ./target/release/engine-rust
-      cd ..
-      ```
-
-      _Note: The Rust engine might be used as a library by another service, or run as its own service._
-
-    - **Mailing:**
-
-      ```bash
-      cd mailing
-      npm install # or yarn install
-      # To run: npm start # or node index.js
-      cd ..
-      ```
-
-    - **Polling Server (TypeScript):**
-
-      ```bash
-      cd polling-server
-      npm install # or yarn install
-      # To run: npm start # or node index.js (TypeScript projects often have a start script that handles compilation)
-      cd ..
-      ```
-
-      _Note: This server connects to Redis Streams to process incoming events._
-
-    - **Websocket (TypeScript):**
-      ```bash
-      cd websocket
-      npm install # or yarn install
-      # To run: npm start # or node index.js (TypeScript projects often have a start script that handles compilation)
-      cd ..
-      ```
+---
 
 ### Configuration
 
@@ -120,7 +76,7 @@ Each part of the project may need specific settings (like database connections, 
 
 Once all services are running, the frontend application will connect to the backend and WebSocket services. The Rust engine, Polling Server, and Mailing service will work in the background, handling data, real-time events from Redis Streams, and sending emails.
 
-- Open the frontend application in your browser at `http://localhost:[FRONTEND_PORT]` (usually 3000 or 5173).
+- Open the frontend application in your browser at `http://localhost:5173` (usually 3000 or 5173).
 - Use the application to see real-time updates and how data is processed.
 
 ## Contributing
@@ -136,6 +92,3 @@ Don't forget to give the project a star! Thank you!
 4.  Push to the Branch (`git push origin feature/AmazingFeature`)
 5.  Open a Pull Request
 
-## License
-
-This project is distributed under the MIT License. See the `LICENSE` file for full details.
